@@ -1,14 +1,8 @@
-/**
+package konferencija; /**
  * Created by SilentStorm1 on 12.5.2017..
  */
-/**
- * Created by Stefan on 22.2.2017.
- */
-import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
 import javax.sound.sampled.*;
 
 public class Server2 {
@@ -17,11 +11,11 @@ public class Server2 {
     private SourceDataLine sourceLine;
 
     private AudioFormat getAudioFormat() {
-        float sampleRate = 16000.0F;
-        int sampleInbits = 16;
-        int channels = 1;
+        float sampleRate = 48000.0F;
+        int sampleInbits = 32;
+        int channels = 2;
         boolean signed = true;
-        boolean bigEndian = false;
+        boolean bigEndian = true;
         return new AudioFormat(sampleRate, sampleInbits, channels, signed, bigEndian);
     }
 
@@ -32,10 +26,10 @@ public class Server2 {
     private void runVOIP() {
         try {
             DatagramSocket serverSocket = new DatagramSocket(1234);
-            byte[] receiveData = new byte[10000];
+            byte[] receiveData = new byte[8192];
             ArrayList<Integer> lista_portova=new ArrayList<>();
+            DatagramPacket primljeni_paket = new DatagramPacket(receiveData, receiveData.length);
             while (true) {
-                DatagramPacket primljeni_paket = new DatagramPacket(receiveData, receiveData.length);
                 serverSocket.receive(primljeni_paket);
                 byte audioData[] = primljeni_paket.getData();
                 System.out.println("Primljen paket : " + primljeni_paket.getAddress().getHostAddress() + " " + primljeni_paket.getPort());
@@ -45,48 +39,20 @@ public class Server2 {
                 for (Integer port:lista_portova) {
                     if(port!=primljeni_paket.getPort())
                     {
-                        Thread t= new Thread(() -> {
-
-                           while(audioData.length>0)
-                            try {
-                                Random rand=new Random();
-                                 int port2=rand.nextInt(5000)+1000;
-
+                        try {
                                 DatagramSocket clientSocket = new DatagramSocket();
                                 InetAddress ip_adresa = InetAddress.getByName("127.0.0.1");
-                                DatagramPacket salji_paket = new DatagramPacket(audioData, audioData.length, ip_adresa, port+1);
-
+                                DatagramPacket salji_paket = new DatagramPacket(audioData, primljeni_paket.getLength(), ip_adresa, port+1);
                                 clientSocket.send(salji_paket);
-
                                 clientSocket.close();
-
                             } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-
-                        });
-                        t.start();}
+                                e.printStackTrace();}
+                        }
                 }}
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    class PlayThread extends Thread {
-
-        byte tempBuffer[] = new byte[10000];
-
-        public void run() {
-            try {
-                int cnt;
-                while ((cnt = input_play_stream.read(tempBuffer, 0, tempBuffer.length)) != -1)
-                    if (cnt > 0)
-                        sourceLine.write(tempBuffer, 0, cnt);
-            } catch (Exception e) {
-                System.out.println(e);
-                System.exit(0);
-            }
-        }
-    }
 }
 

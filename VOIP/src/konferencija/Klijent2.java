@@ -1,4 +1,4 @@
-/**
+package konferencija; /**
  * Created by Stefan on 22.2.2017.
  */
 
@@ -15,7 +15,7 @@ import java.net.*;
 import java.util.Random;
 import javax.sound.sampled.*;
 
-public class Klijent extends Application {
+public class Klijent2 extends Application {
 
     private boolean stop_audio = false;
     private ByteArrayOutputStream outputStream;
@@ -24,7 +24,7 @@ public class Klijent extends Application {
     private SourceDataLine sourceLine;
     private int port2;
     private int port;
-
+    private int buffer_size=8192;
     public static void main(String args[]) {
         launch();
     }
@@ -61,7 +61,7 @@ public class Klijent extends Application {
             targetDataLine.close();
         });
 
-        play.setOnMouseClicked(event -> playAudio());
+        //play.setOnMouseClicked(event -> playAudio());
 
         primaryStage.setOnCloseRequest(event -> stop_audio=true);
         hbox.getChildren().addAll(start,play,stop);
@@ -74,33 +74,33 @@ public class Klijent extends Application {
     private void listen() {
         try {
             Random rand=new Random();
+
             port2=rand.nextInt(5000)+1000;
             DatagramSocket serverSocket = new DatagramSocket(port+1); // +1 ?
-            byte[] receiveData = new byte[10000];
+            byte[] receiveData = new byte[buffer_size];
+            AudioFormat audio_format = get_audio_format();
+            DatagramPacket primljeni_paket = new DatagramPacket(receiveData, receiveData.length);
+
+            DataLine.Info dataLineInfo = new DataLine.Info(SourceDataLine.class, audio_format);
+            sourceLine = (SourceDataLine) AudioSystem.getLine(dataLineInfo);
+            sourceLine.open(audio_format, buffer_size);
+            sourceLine.start();
+
+            //FloatControl control = (FloatControl)sourceLine.getControl(FloatControl.Type.MASTER_GAIN);
+            //control.setValue(control.getMaximum());
             while (!stop_audio) {
-                DatagramPacket primljeni_paket = new DatagramPacket(receiveData, receiveData.length);
                 serverSocket.receive(primljeni_paket);
+
                 System.out.println("Primljen paket : " + primljeni_paket.getAddress().getHostAddress() + " " + primljeni_paket.getPort());
-                try {
-                    byte audioData[] = primljeni_paket.getData();
-                    InputStream inputStream = new ByteArrayInputStream(audioData);
-                    AudioFormat audio_format = get_audio_format();
-                    input_play_stream = new AudioInputStream(inputStream, audio_format, audioData.length / audio_format.getFrameSize());
 
-                    DataLine.Info dataLineInfo = new DataLine.Info(SourceDataLine.class, audio_format);
-                    sourceLine = (SourceDataLine) AudioSystem.getLine(dataLineInfo);
-                    sourceLine.open(audio_format);
-                    sourceLine.start();
+                sourceLine.write(AES.decrypt(primljeni_paket.getData()), 0, primljeni_paket.getLength());
 
-                    PlayThread play = new PlayThread();
-                    play.start();
-                } catch (Exception e) {
-                    System.out.println(e);
-                    System.exit(0);
-                }
+
             }
         } catch (Exception e) {
+            System.out.println(e);
             e.printStackTrace();
+            System.exit(0);
         }
     }
 
@@ -111,7 +111,7 @@ public class Klijent extends Application {
             AudioFormat audio_format = get_audio_format();
             DataLine.Info dataLineInfo = new DataLine.Info(TargetDataLine.class, audio_format);
             targetDataLine = (TargetDataLine) AudioSystem.getLine(dataLineInfo);
-            targetDataLine.open(audio_format);
+            targetDataLine.open(audio_format,buffer_size);
             targetDataLine.start();
 
             Zauzmi_kanal kanal=new Zauzmi_kanal();
@@ -145,17 +145,17 @@ public class Klijent extends Application {
     }
 
     private AudioFormat get_audio_format() {
-        float sampleRate = 16000.0F;
+        float sampleRate = 48000.0F;
         int sampleInbits = 16;
-        int channels = 1;
+        int channels = 2;
         boolean signed = true;
-        boolean bigEndian = false;
+        boolean bigEndian = true;
         return new AudioFormat(sampleRate, sampleInbits, channels, signed, bigEndian);
     }
 
     class Zauzmi_kanal extends Thread {
 
-        byte tempBuffer[] = new byte[10000];
+        byte tempBuffer[] = new byte[buffer_size];
 
         public void run() {
 
@@ -167,13 +167,15 @@ public class Klijent extends Application {
                 port = rand.nextInt(5000) + 1000;
                 DatagramSocket clientSocket = new DatagramSocket(port);
                 InetAddress ip_adresa = InetAddress.getByName("127.0.0.1");
+                DatagramPacket salji_paket;
                 while (!stop_audio) {
                     int cnt = targetDataLine.read(tempBuffer, 0, tempBuffer.length);
                     if (cnt > 0) {
-                        DatagramPacket salji_paket = new DatagramPacket(tempBuffer, tempBuffer.length, ip_adresa, 1234);
+                        byte[] encrypt = AES.encrypt(tempBuffer, 0, cnt);
+                        salji_paket = new DatagramPacket(encrypt, encrypt.length, ip_adresa, 1234);
                         clientSocket.send(salji_paket);
 
-                        outputStream.write(tempBuffer, 0, cnt);
+                        //outputStream.write(tempBuffer, 0, cnt); snimanje
                     }
                 }
 
@@ -188,7 +190,7 @@ public class Klijent extends Application {
     }
 
     class PlayThread extends Thread {
-        byte tempBuffer[] = new byte[10000];
+        byte tempBuffer[] = new byte[5000];
         public void run() {
             try {
                 int cnt;
