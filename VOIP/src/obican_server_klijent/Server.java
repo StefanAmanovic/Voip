@@ -1,10 +1,7 @@
-/**
+package obican_server_klijent; /**
  * Created by Stefan on 22.2.2017.
  */
-import java.io.*;
 import java.net.*;
-import java.util.ArrayList;
-import java.util.List;
 import javax.sound.sampled.*;
 
 public class Server {
@@ -13,11 +10,11 @@ public class Server {
     private SourceDataLine sourceLine;
 
     private AudioFormat getAudioFormat() {
-        float sampleRate = 16000.0F;
+        float sampleRate = 48000.0F;
         int sampleInbits = 16;
-        int channels = 1;
+        int channels = 2;
         boolean signed = true;
-        boolean bigEndian = false;
+        boolean bigEndian = true;
         return new AudioFormat(sampleRate, sampleInbits, channels, signed, bigEndian);
     }
 
@@ -28,31 +25,32 @@ public class Server {
     private void runVOIP() {
         try {
             DatagramSocket serverSocket = new DatagramSocket(1234);
-            byte[] receiveData = new byte[10000];
+            byte[] receiveData = new byte[512];
 
-            while (true) {
-                DatagramPacket primljeni_paket = new DatagramPacket(receiveData, receiveData.length);
-                serverSocket.receive(primljeni_paket);
-                byte audioData[] = primljeni_paket.getData();
-                System.out.println("Primljen paket : " + primljeni_paket.getAddress().getHostAddress() + " " + primljeni_paket.getPort());
+            DatagramPacket primljeni_paket = new DatagramPacket(receiveData, 500);
+
                 try {
 
-                    InputStream inputStream = new ByteArrayInputStream(audioData);
                     AudioFormat audio_format = getAudioFormat();
-                    input_play_stream = new AudioInputStream(inputStream, audio_format, audioData.length / audio_format.getFrameSize());
 
                     DataLine.Info dataLineInfo = new DataLine.Info(SourceDataLine.class, audio_format);
                     sourceLine = (SourceDataLine) AudioSystem.getLine(dataLineInfo);
                     sourceLine.open(audio_format);
                     sourceLine.start();
 
-                    PlayThread play = new PlayThread();
-                    play.start();
+                    FloatControl control = (FloatControl)sourceLine.getControl(FloatControl.Type.MASTER_GAIN);
+                    control.setValue(control.getMaximum());
+
+                    while (true) {
+                        serverSocket.receive( primljeni_paket ) ;
+                        sourceLine.write(primljeni_paket.getData(), 0, 500);   //playing audio available in tempBuffer
+
+                    }
                 } catch (Exception e) {
                     System.out.println(e);
                     System.exit(0);
                 }
-            }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
